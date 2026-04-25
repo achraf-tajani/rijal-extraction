@@ -214,7 +214,11 @@ def main():
                     shuyukh = len(rawi.get("الشيوخ", []))
                     talamidh = len(rawi.get("التلاميذ", []))
 
-                    if raqm and raqm not in already_done:
+                    has_content = bool(rawi.get("الكتب") or rawi.get("الشيوخ"))
+
+                    if not has_content:
+                        print(f"  - IGNORE #{raqm} | {nom} (pas de كتب ni شيوخ — faux positif preface)", flush=True)
+                    elif raqm and raqm not in already_done:
                         rawi["_pages"] = f"{i+1}-{i+2}"
                         out_file.write(json.dumps(rawi, ensure_ascii=False) + "\n")
                         out_file.flush()
