@@ -105,10 +105,15 @@ def call_llm_streaming(text):
     r.raise_for_status()
 
     content = ""
+    tokens = 0
     for line in r.iter_lines():
         if line:
             chunk = json.loads(line)
-            content += chunk.get("message", {}).get("content", "")
+            token = chunk.get("message", {}).get("content", "")
+            content += token
+            tokens += 1
+            if tokens % 50 == 0:
+                print(".", end="", flush=True)
             if chunk.get("done"):
                 break
 
