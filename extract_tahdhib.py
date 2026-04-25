@@ -17,6 +17,19 @@ import io
 import requests
 from pathlib import Path
 
+# Ecrire dans stdout ET dans le fichier log simultanement
+class TeeLogger:
+    def __init__(self, filepath):
+        self.terminal = sys.stdout
+        self.log = open(filepath, "a", encoding="utf-8")
+    def write(self, msg):
+        self.terminal.write(msg)
+        self.log.write(msg)
+        self.log.flush()
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 csv.field_size_limit(10_000_000)
 
@@ -105,15 +118,10 @@ def call_llm_streaming(text):
     r.raise_for_status()
 
     content = ""
-    tokens = 0
     for line in r.iter_lines():
         if line:
             chunk = json.loads(line)
-            token = chunk.get("message", {}).get("content", "")
-            content += token
-            tokens += 1
-            if tokens % 50 == 0:
-                print(".", end="", flush=True)
+            content += chunk.get("message", {}).get("content", "")
             if chunk.get("done"):
                 break
 
@@ -149,6 +157,17 @@ def load_already_done():
 def main():
     OUTPUT_DIR.mkdir(exist_ok=True)
 
+    # Activer le log fichier
+    LOG_FILE = OUTPUT_DIR / "extraction.log"
+    sys.stdout = TeeLogger(LOG_FILE)
+
+    print(f"\n{'='*60}", flush=True)
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] DEMARRAGE EXTRACTION", flush=True)
+    print(f"  Modele  : {MODEL}", flush=True)
+    print(f"  Log     : {LOG_FILE}", flush=True)
+    print(f"  Output  : {OUTPUT_JSONL}", flush=True)
+    print(f"{'='*60}\n", flush=True)
+
     print("Chargement des pages...")
     pages = load_pages()
     total_pages = len(pages)
@@ -171,20 +190,30 @@ def main():
     total_windows = total_pages - 1
 
     try:
-        for i in range(0, total_pages - 1, 2):  # step 2 pour avancer, overlap via i+1
+        for i in range(0, total_pages - 1, 2):
             text = clean(pages[i] + " " + pages[i + 1])
             pct = (i + 1) / total_pages * 100
+            ts = time.strftime("%H:%M:%S")
 
-            print(f"  [{i+1:>5}/{total_pages}] {pct:5.1f}%", end=" ", flush=True)
+            print(f"\n[{ts}] Pages {i+1}-{i+2} / {total_pages} ({pct:.1f}%)", flush=True)
+            print(f"  Envoi au modele ({len(text)} chars)...", flush=True)
 
             t0 = time.time()
             try:
                 result = call_with_retry(text, i)
                 rawis = result.get("rawis", [])
+                elapsed = time.time() - t0
                 new_count = 0
+
+                print(f"  Reponse recue en {elapsed:.0f}s — {len(rawis)} rawi(s) detecte(s)", flush=True)
 
                 for rawi in rawis:
                     raqm = str(rawi.get("رقم_الترجمة", ""))
+                    nom = rawi.get("الاسم_الكامل", "?")
+                    scholars = len(rawi.get("أقوال_العلماء", []))
+                    shuyukh = len(rawi.get("الشيوخ", []))
+                    talamidh = len(rawi.get("التلاميذ", []))
+
                     if raqm and raqm not in already_done:
                         rawi["_pages"] = f"{i+1}-{i+2}"
                         out_file.write(json.dumps(rawi, ensure_ascii=False) + "\n")
@@ -192,14 +221,18 @@ def main():
                         already_done.add(raqm)
                         new_count += 1
                         processed_rawis += 1
+                        print(f"  + SAUVEGARDE #{raqm} | {nom} | {shuyukh} shuyukh | {talamidh} talamidh | {scholars} avis scholars", flush=True)
+                    elif raqm:
+                        print(f"  ~ SKIP #{raqm} (deja extrait)", flush=True)
 
-                elapsed = time.time() - t0
-                print(f"→ {new_count} rawis | {elapsed:.0f}s")
+                if new_count == 0 and len(rawis) == 0:
+                    print(f"  ! Aucun rawi complet trouve sur ces pages", flush=True)
+
                 processed_windows += 1
 
             except Exception as e:
                 elapsed = time.time() - t0
-                print(f"→ ECHEC ({elapsed:.0f}s) : {str(e)[:60]}")
+                print(f"  ! ECHEC apres {elapsed:.0f}s : {str(e)[:100]}", flush=True)
                 failed.append({"pages": f"{i+1}-{i+2}", "error": str(e)})
                 with open(OUTPUT_FAILED, "w", encoding="utf-8") as ff:
                     json.dump(failed, ff, ensure_ascii=False, indent=2)
@@ -207,7 +240,8 @@ def main():
             time.sleep(DELAY_OK)
 
             if (processed_windows + 1) % CHECKPOINT_EVERY == 0:
-                print(f"\n  === Checkpoint : {processed_rawis} rawis extraits ===\n")
+                ts = time.strftime("%H:%M:%S")
+                print(f"\n[{ts}] === CHECKPOINT : {processed_rawis} rawis extraits, {len(failed)} echecs ===\n", flush=True)
 
     finally:
         out_file.close()
