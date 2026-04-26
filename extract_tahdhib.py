@@ -125,7 +125,6 @@ def call_llm(text, context):
                 {"role": "system", "content": system},
                 {"role": "user",   "content": prompt},
             ],
-            "format": "json",
             "stream": False,
             "options": {"temperature": 0.0, "num_ctx": NUM_CTX},
         },
@@ -133,8 +132,15 @@ def call_llm(text, context):
     )
     r.raise_for_status()
 
-    content = r.json()["message"]["content"]
-    result = json.loads(content)
+    data = r.json()
+    print(f"    DEBUG type={type(data).__name__} keys={list(data.keys()) if isinstance(data, dict) else 'N/A'}", flush=True)
+    content = data.get("message", {}).get("content", "")
+    print(f"    DEBUG content={repr(content[:200])}", flush=True)
+
+    match = re.search(r'\{.*\}', content, re.DOTALL)
+    if not match:
+        return {"rawis": []}
+    result = json.loads(match.group())
     if not isinstance(result, dict):
         return {"rawis": []}
     return result
