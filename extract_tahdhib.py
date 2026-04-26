@@ -126,36 +126,16 @@ def call_llm(text, context):
                 {"role": "user",   "content": prompt},
             ],
             "format": "json",
-            "stream": True,
+            "stream": False,
             "options": {"temperature": 0.0, "num_ctx": NUM_CTX},
         },
         timeout=TIMEOUT,
-        stream=True,
     )
     r.raise_for_status()
 
-    content = ""
-    for line in r.iter_lines():
-        if line:
-            try:
-                chunk = json.loads(line)
-            except Exception as e:
-                print(f"    DEBUG ligne brute : {repr(line[:200])}", flush=True)
-                raise e
-            if not isinstance(chunk, dict):
-                print(f"    DEBUG chunk pas dict : {repr(chunk)[:100]}", flush=True)
-                raise Exception(f"chunk inattendu : {repr(chunk)[:80]}")
-            content += chunk.get("message", {}).get("content", "")
-            if chunk.get("done"):
-                break
-
-    try:
-        result = json.loads(content)
-    except Exception as je:
-        print(f"    DEBUG content brut : {repr(content[:200])}", flush=True)
-        raise je
+    content = r.json()["message"]["content"]
+    result = json.loads(content)
     if not isinstance(result, dict):
-        print(f"    DEBUG result type={type(result)} val={repr(result)[:100]}", flush=True)
         return {"rawis": []}
     return result
 
