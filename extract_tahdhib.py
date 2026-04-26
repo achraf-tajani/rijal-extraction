@@ -137,7 +137,14 @@ def call_llm(text, context):
     content = ""
     for line in r.iter_lines():
         if line:
-            chunk = json.loads(line)
+            try:
+                chunk = json.loads(line)
+            except Exception as e:
+                print(f"    DEBUG ligne brute : {repr(line[:200])}", flush=True)
+                raise e
+            if not isinstance(chunk, dict):
+                print(f"    DEBUG chunk pas dict : {repr(chunk)[:100]}", flush=True)
+                raise Exception(f"chunk inattendu : {repr(chunk)[:80]}")
             content += chunk.get("message", {}).get("content", "")
             if chunk.get("done"):
                 break
