@@ -142,8 +142,13 @@ def call_llm(text, context):
             if chunk.get("done"):
                 break
 
-    result = json.loads(content)
+    try:
+        result = json.loads(content)
+    except Exception as je:
+        print(f"    DEBUG content brut : {repr(content[:200])}", flush=True)
+        raise je
     if not isinstance(result, dict):
+        print(f"    DEBUG result type={type(result)} val={repr(result)[:100]}", flush=True)
         return {"rawis": []}
     return result
 
