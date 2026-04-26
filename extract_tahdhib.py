@@ -39,7 +39,7 @@ csv.field_size_limit(10_000_000)
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 OLLAMA_URL       = "http://localhost:11434"
 MODEL            = "qwen2.5:32b"
-NUM_CTX          = 4096
+NUM_CTX          = 8192
 TIMEOUT          = 600
 MAX_RETRIES      = 3
 DELAY_FAIL       = 10.0
@@ -142,7 +142,10 @@ def call_llm(text, context):
             if chunk.get("done"):
                 break
 
-    return json.loads(content)
+    result = json.loads(content)
+    if not isinstance(result, dict):
+        return {"rawis": []}
+    return result
 
 
 def call_with_retry(text, context, page_idx):
