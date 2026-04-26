@@ -195,8 +195,9 @@ def main():
             pct = (i + 1) / total_pages * 100
             ts = time.strftime("%H:%M:%S")
 
-            print(f"\n[{ts}] Pages {i+1}-{i+2} / {total_pages} ({pct:.1f}%)", flush=True)
-            print(f"  Envoi au modele ({len(text)} chars)...", flush=True)
+            print(f"\n[{ts} UTC] Pages {i+1}-{i+2} / {total_pages} ({pct:.1f}%)", flush=True)
+            print(f"  Texte : {text[:120].strip()!r}", flush=True)
+            print(f"  Envoi ({len(text)} chars)... en attente reponse", flush=True)
 
             t0 = time.time()
             try:
@@ -205,7 +206,8 @@ def main():
                 elapsed = time.time() - t0
                 new_count = 0
 
-                print(f"  Reponse recue en {elapsed:.0f}s — {len(rawis)} rawi(s) detecte(s)", flush=True)
+                ts2 = time.strftime("%H:%M:%S")
+                print(f"  [{ts2} UTC] OK {elapsed:.0f}s — {len(rawis)} rawi(s) detecte(s)", flush=True)
 
                 for rawi in rawis:
                     raqm = str(rawi.get("رقم_الترجمة", ""))
@@ -214,7 +216,12 @@ def main():
                     shuyukh = len(rawi.get("الشيوخ", []))
                     talamidh = len(rawi.get("التلاميذ", []))
 
-                    has_content = bool(rawi.get("الكتب") or rawi.get("الشيوخ"))
+                    # Vrai rawi = codes livres courts (بخ م ق س د...) ET au moins 2 shuyukh
+                    kutub = rawi.get("الكتب", [])
+                    shuyukh_list = rawi.get("الشيوخ", [])
+                    has_real_kutub = any(len(k.strip()) <= 4 for k in kutub)
+                    has_shuyukh = len(shuyukh_list) >= 2
+                    has_content = has_real_kutub or has_shuyukh
 
                     if not has_content:
                         print(f"  - IGNORE #{raqm} | {nom} (pas de كتب ni شيوخ — faux positif preface)", flush=True)
